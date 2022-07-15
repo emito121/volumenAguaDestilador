@@ -1,7 +1,14 @@
 #include "inicializaciones.h"
+#include <LiquidCrystal_I2C.h>
+#include <Wire.h>
 
-const int TriggerAd = 6;   //Pin digital
-const int EchoAd = 5;   //Pin digital
+const int TriggerAd = 5;   //Pin digital
+const int EchoAd = 6;   //Pin digital
+const int rele = 13;
+int corte_flag = 0; //iniciamos la bandera baja
+int volumen_tanque = 0;
+int volumen_corte = 100;
+int volumen_histeresis = 80;
 
 long t1; //timepo que demora en llegar el eco
 long d1; //distancia en centimetros
@@ -9,59 +16,131 @@ int contador = 0;
 
 char restTime; //variable para controlar los eco
 
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
 void setup() {
   // put your setup code here, to run once:
+  
   Serial.begin(9600);//iniciailzamos la comunicación
+  lcd.init();
+  lcd.backlight();
+  
   pinMode(TriggerAd, OUTPUT); //pin como salida
   pinMode(EchoAd, INPUT);  //pin como entrada
-  iniTimer2(); //inicio timer 2
-  interrupts();//Habilito las interrupciones
+  pinMode(rele, OUTPUT);  //pin como salida
+  digitalWrite(rele, HIGH);
+  //iniTimer2(); //inicio timer 2
+  //interrupts();//Habilito las interrupciones
+  lcd.setCursor(0,0);
+  lcd.print("Cargando...");
+  delay(2000);
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
+  digitalWrite(TriggerAd, HIGH);
+  //restTime = 'ON'; //para que de un descanso de 10us antes de leer el eco
+  delayMicroseconds(10);
+  digitalWrite(TriggerAd, LOW);
+  t1 = pulseIn(EchoAd, HIGH); //obtenemos el ancho del pulso
+  d1 = t1 / 59;           //escalamos el tiempo a una distancia en cm
+  if (d1 > 0){
+    volumen_tanque = volumenTanque(t1);
+//    lcd.clear();
+//    lcd.setCursor(0,0);
+//    lcd.print(t1);
+//    lcd.setCursor(0,1);
+//    lcd.print("VOLUMEN: ");
+//    lcd.print(volumen_tanque);
+//    lcd.print("%");
+    if ((volumen_tanque < volumen_histeresis) and (corte_flag == 0)){
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("LLENANDO...");
+//      lcd.print("TIEMPO: ");
+//      lcd.print(t1);
+//      lcd.print(" us");
+      lcd.setCursor(0,1);
+      lcd.print("VOLUMEN: ");
+      lcd.print(volumen_tanque);
+      lcd.print("%");
+    }
+    
+    else if ((volumen_tanque >= volumen_corte) and (corte_flag == 0)){
+      digitalWrite(rele, LOW);
+      corte_flag = 1;
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("DETENIDO!");
+//      lcd.print("TIEMPO: ");
+//      lcd.print(t1);
+//      lcd.print(" us");
+      lcd.setCursor(0,1);
+      lcd.print("VOLUMEN: ");
+      lcd.print(volumen_tanque);
+      lcd.print("%");
+    }
+
+    else if ((volumen_tanque < volumen_histeresis) and (corte_flag == 1)){
+      digitalWrite(rele, HIGH);
+      corte_flag = 0;
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("LLENANDO...");
+//      lcd.print("TIEMPO: ");
+//      lcd.print(t1);
+//      lcd.print(" us");
+      lcd.setCursor(0,1);
+      lcd.print("VOLUMEN: ");
+      lcd.print(volumen_tanque);
+      lcd.print("%");
+    }
+
+    else if ((volumen_tanque >= volumen_corte) and (corte_flag == 1)){
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("DETENIDO!");
+//      lcd.print("TIEMPO: ");
+//      lcd.print(t1);
+//      lcd.print(" us");
+      lcd.setCursor(0,1);
+      lcd.print("VOLUMEN: ");
+      lcd.print(volumen_tanque);
+      lcd.print("%");
+    }
+
+     else if ((volumen_tanque < volumen_corte) and (volumen_tanque >= volumen_histeresis) and (corte_flag == 1)){
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("DETENIDO!");
+//      lcd.print("TIEMPO: ");
+//      lcd.print(t1);
+//      lcd.print(" us");
+      lcd.setCursor(0,1);
+      lcd.print("VOLUMEN: ");
+      lcd.print(volumen_tanque);
+      lcd.print("%");
+    }
+     else if ((volumen_tanque < volumen_corte) and (volumen_tanque >= volumen_histeresis) and (corte_flag == 0)){
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("LLENANDO...");
+//      lcd.print("TIEMPO: ");
+//      lcd.print(t1);
+//      lcd.print(" us");
+      lcd.setCursor(0,1);
+      lcd.print("VOLUMEN: ");
+      lcd.print(volumen_tanque);
+      lcd.print("%");
+    }
+    delay(3000);
+    }
+    
 }
-
-ISR(TIMER2_COMPA_vect)//Rutina interrupción Timer2, configurado a 10us
-{
-    if (contador == 2000) { //para que no se sature agrego 20ms entre ciclos
-      if (restTime = 'OFF') { //si se debe enviar el eco
-        digitalWrite(TriggerAd, HIGH);
-        restTime = 'ON'; //para que de un descanso de 10us antes de leer el eco
-      }
-      if (restTime = 'ON') { //si se esta esperando el eco
-        digitalWrite(TriggerAd, LOW);
-        t1 = pulseIn(EchoAd, HIGH); //obtenemos el ancho del pulso
-        d1 = t1 / 59;           //escalamos el tiempo a una distancia en cm
-              Serial.print("DistanciaAd: ");
-              Serial.print(d1);      //Enviamos serialmente el valor de la distancia
-              Serial.print("cm");
-              Serial.println();
-              Serial.print(t1);
-              Serial.print(volumenTanque(t1));
-              Serial.println();
-        contador = 0;
-        restTime = 'OFF'; //si se debe enviar el eco
-//        if (d1 < 60) {
-//          digitalWrite(LEDAd, 1);
-//          obstaculos = obstaculos | 0b00000001;
-//          Serial.write(obstaculos);
-//        }
-      }
-      }
-
-    contador++; //suma al contador cada vez que se genera la interrupcion
-    //conteo2++;
-
-//    if (conteo2 == REINICIO){
-//      obstaculos = 0b00000000;
-//      conteo2 = 0;
-//    }
-  }
 
 int volumenTanque(float tiempo){
   
-  int ppVolumen = tiempo*-44493.80593087+131;
+  int ppVolumen = tiempo*-0.023581953272125786+131.91744660427165;
   
   return ppVolumen;
   }
